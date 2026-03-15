@@ -179,9 +179,3 @@ cython_debug/
 #  refer to https://docs.cursor.com/context/ignore-files
 .cursorignore
 .cursorindexingignore
-
-data_sources/*.gpkg
-data_sources/*.gdb
-data_sources/*.tif
-data_sources/*.tfw
-data_sources/*.ovr
