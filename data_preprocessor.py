@@ -4,9 +4,18 @@ import numpy as np
 from shapely.geometry import box
 
 # File Paths
-gdb_path = "./data_sources/NOAA_coastal_data.gdb"
-sand_path = "./data_sources/sand_resources.geojson"
+gdb_path    = "./data_sources/NOAA_coastal_data.gdb"
+sand_path   = "./data_sources/sand_resources.geojson"
 output_path = "./data_sources/processed_grid.gpkg"
+
+FEATURES = [
+    # 'shore_distance',
+    'DRVAL1',
+    'obstruction_distance',
+    'DRVAL2',
+    'depth_range',
+    #'sand_distance',
+]
 
 # Load wreck layers
 wrecks = gpd.read_file(gdb_path, layer='Coastal_Wreck_point').to_crs(epsg=4326)
@@ -45,26 +54,56 @@ joined_df = gpd.GeoDataFrame(joined_df, geometry='geometry', crs='EPSG:4326')
 # Go back to meters projection
 joined_df_m = joined_df.to_crs(epsg=32618)
 
-# Calculate shore distance
-coastline = gpd.read_file(gdb_path, layer='Coastal_Coastline_line').to_crs(epsg=32618)
-joined_df_m['shore_distance'] = joined_df_m.geometry.centroid.distance(coastline.union_all())
+LOADERS = {}
 
-sand_m = sand.to_crs(epsg=32618)
-sand_buffer = sand_m.buffer(5000).union_all()  # 5km buffer around actual dredge zones
-joined_df_m = joined_df_m[joined_df_m.geometry.intersects(sand_buffer)].copy()
+def load_shore_distance(grid):
+    # Calculate shore distance
+    coastline = gpd.read_file(gdb_path, layer='Coastal_Coastline_line').to_crs(epsg=32618)
+    return grid.geometry.centroid.distance(coastline.union_all())
+LOADERS['shore_distance'] = load_shore_distance
 
-# Add Coastal Depth Area to dataframe
-min_depth = gpd.read_file(gdb_path, layer='Coastal_Depth_Area').to_crs(epsg=32618)
-temp = gpd.sjoin(joined_df_m[['geometry']], min_depth[['DRVAL1', 'geometry']], how='left')
-joined_df_m['DRVAL1'] = temp.groupby(temp.index).first()['DRVAL1']
-joined_df_m['DRVAL1'] = joined_df_m['DRVAL1'].fillna(-1).astype(float)
+def load_DRVAL1(grid):
+    # Add Coastal Depth Area to dataframe
+    min_depth = gpd.read_file(gdb_path, layer='Coastal_Depth_Area').to_crs(epsg=32618)
+    temp = gpd.sjoin(grid[['geometry']], min_depth[['DRVAL1', 'geometry']], how='left')
+    return temp.groupby(temp.index).first()['DRVAL1'].fillna(-1).astype(float)
+LOADERS['DRVAL1'] = load_DRVAL1
+
+def load_DRVAL2(grid):
+    min_depth = gpd.read_file(gdb_path, layer='Coastal_Depth_Area').to_crs(epsg=32618)
+    temp = gpd.sjoin(grid[['geometry']], min_depth[['DRVAL2', 'geometry']], how='left')
+    return temp.groupby(temp.index).first()['DRVAL2'].fillna(-1).astype(float)
+LOADERS['DRVAL2'] = load_DRVAL2
+
+def load_depth_range(grid):
+    return (grid['DRVAL2'] - grid['DRVAL1']).clip(lower=0)
+LOADERS['depth_range'] = load_depth_range
+
+def load_sand_distance(grid):
+    sand = gpd.read_file(sand_path).to_crs(epsg=32618)
+    return joined_df_m.geometry.centroid.distance(sand.union_all())
+LOADERS['sand_distance'] = load_sand_distance
+
+def load_obstruction_distance(grid):
+    obs = gpd.read_file(gdb_path, layer='Coastal_Obstruction_point').to_crs(epsg=32618)
+    return grid.geometry.centroid.distance(obs.union_all())
+LOADERS['obstruction_distance'] = load_obstruction_distance
+
+for feat in FEATURES:
+    joined_df_m[feat] = LOADERS[feat](joined_df_m)
+
+#sand_m = sand.to_crs(epsg=32618)
+#sand_buffer = sand_m.buffer(5000).union_all()  # 5km buffer around actual dredge zones
+#joined_df_m = joined_df_m[joined_df_m.geometry.intersects(sand_buffer)].copy()
 
 # Information
 print(f"Total tiles in coastal zone: {len(joined_df_m)}")
 print(f"Confirmed wreck tiles (target=1): {joined_df_m['target'].sum()}")
 print("\nFeature means by class:")
-print(joined_df_m.groupby('target')[['shore_distance', 'DRVAL1']].mean())
+print(joined_df_m.groupby('target')[FEATURES].mean())
 
 # Export
 joined_df_m.to_file(output_path, driver="GPKG")
 print(f"\nProcessed grid exported to: {output_path}")
+
+print(joined_df_m['target'].value_counts())
