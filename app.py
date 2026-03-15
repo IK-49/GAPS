@@ -4,16 +4,16 @@ import folium
 from streamlit_folium import st_folium
 import pandas as pd
 
-st.set_page_config(page_title="Wreck Risk Map", layout="wide")
+st.set_page_config(page_title="GAPS Map", layout="wide")
 
 TOUR_STEPS = [
-    ("🗺️ Welcome to GAPS", "This tool maps high-probability zones for undiscovered shipwrecks along the North Carolina Outer Banks — the 'Graveyard of the Atlantic'. Click Next to learn how it works."),
+    ("🗺️ Welcome to GAPS", "This tool maps high-probability zones for undiscovered shipwrecks along the North Carolina Outer Banks, also known as the 'Graveyard of the Atlantic'. Click Next to learn how it works."),
     ("📊 The Grid", "The study area is divided into 91,980 tiles at 500×500m resolution. Each tile is scored by a Random Forest model trained on 102 confirmed wreck locations from NOAA nautical chart data."),
-    ("🔴 Red Circles", "Red circles are high-risk tiles — the top N% most likely to contain an undiscovered wreck. Opacity indicates confidence: brighter red = higher ML probability."),
+    ("🔴 Red Circles", "Red circles are high-risk tiles or the top N% most likely to contain an undiscovered wreck. Opacity indicates confidence: brighter red = higher ML probability according to the model."),
     ("🟡 Yellow Dots", "Yellow dots are confirmed wreck locations from NOAA ENC charts and the NOAA ENC Direct API. These were used to train and validate the model."),
-    ("🎚️ The Slider", "Use the sidebar slider to adjust how many tiles are shown. At 10%, the model captures 87% of known wrecks while reducing the search area by 90%."),
+    ("🎚️ The Slider", "Use the sidebar slider to adjust how many tiles are shown. At just 1%, the model captures 82% of known wrecks while reducing the search area by 99%."),
     ("📈 The Metrics", "Total Tiles Analyzed = full study area. High Risk Zones = tiles above your threshold. Known Wrecks Captured = how many confirmed wrecks fall inside high-risk zones."),
-    ("✅ Ready", "You're all set. Zoom into the Outer Banks to explore high-risk clusters. Hover over any circle for depth and probability details."),
+    ("✅ Ready", "You're all set. Zoom into the Outer Banks to explore high-risk clusters. Hover over the red circles for depth and probability details."),
 ]
 
 if 'tour_active' not in st.session_state:
@@ -54,7 +54,7 @@ if st.session_state.tour_active:
                 st.session_state.tour_active = False
                 st.rerun()
 
-st.title("🚢 Graveyard of the Atlantic — Undiscovered Wreck Risk Map")
+st.title("Graveyard of the Atlantic Predictive Safeguarding (GAPS)")
 st.markdown("Identifying high-risk zones for undiscovered shipwrecks along the North Carolina coast using NOAA nautical chart data.")
 
 # load data from gpkg
@@ -141,24 +141,23 @@ with st.expander("Feature Analysis"):
 # Methodology
 with st.expander("Methodology"):
     st.markdown("""
-    **Data Sources**
-    - NOAA Electronic Navigational Charts (ENC) — wreck points, wreck areas, depth areas, obstruction points
-    - NOAA ENC Direct API — additional harbour-scale wreck points (106 additional records)
-    - Study area: North Carolina coast (Outer Banks / Pamlico Sound)
-    - Grid: 91,980 tiles at 500×500m resolution
+    **Overview**
+    
+    GAPS divides the North Carolina coastline into a grid of 91,980 tiles, each 500×500 meters, and uses Random Forest Classification to score every tile by its likelihood of containing an undiscovered shipwreck.
 
-    **Features**
-    - `DRVAL1`: Minimum water depth — strongest signal (37m at wrecks vs 162m elsewhere)
-    - `DRVAL2`: Maximum water depth — strong signal (214m vs 542m)
-    - `depth_range`: Seafloor depth variability (DRVAL2 − DRVAL1)
-    - `obstruction_distance`: Distance to nearest charted obstruction
+    **Data**
+    
+    All data comes from NOAA's Electronic Navigational Charts, which contain decades of hydrographic survey data for U.S. coastal waters. GAPS pulls confirmed wreck locations, water depth measurements, and charted obstruction points for the Outer Banks and Pamlico Sound region. To supplement the local dataset, the NOAA ENC Direct API was queried for additional harbour-scale wreck records, bringing our total confirmed wreck count to 102 from 59.
 
-    **Model**
-    - Random Forest Classifier (300 trees, class_weight='balanced')
-    - ROC-AUC: 0.63 | Positive samples: 102 out of 91,980 tiles
-    - Top 10% of tiles by ML probability captures 87% of known wrecks
+    **How the model works**
+    
+    Each tile has four key features for training: minimum depth, maximum depth, depth variability, and distance to the nearest charted obstruction. A common pattern observed is that wrecks occur significantly more in shallower water (37m average) compared to the surrounding ocean (162m average). The features were then inputted into the model in order to distinguish wreck-likely tiles from the rest.
+
+    **Results**
+    
+    At the default 1% threshold, the model flags just 930 tiles out of 91,980 while still capturing 82% of all known wreck sites. This reduces the effective search area by 99% compared to an uninformed survey.
 
     **Limitations**
-    - 102 confirmed wreck tiles is a severe class imbalance
-    - Additional data (historical shipping lanes, seafloor composition) would improve accuracy
+    
+    102 confirmed wrecks is a small training set for a dataset of this size, which caps the model's precision. The Outer Banks is also uniformly shallow, so depth alone can't pinpoint exact wreck locations. Incorporating seafloor composition, historical shipping routes, and sediment transport data would meaningfully improve accuracy and represents the best way to expand GAPS for further use.
     """)
