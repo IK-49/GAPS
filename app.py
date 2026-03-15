@@ -6,6 +6,54 @@ import pandas as pd
 
 st.set_page_config(page_title="Wreck Risk Map", layout="wide")
 
+TOUR_STEPS = [
+    ("🗺️ Welcome to GAPS", "This tool maps high-probability zones for undiscovered shipwrecks along the North Carolina Outer Banks — the 'Graveyard of the Atlantic'. Click Next to learn how it works."),
+    ("📊 The Grid", "The study area is divided into 91,980 tiles at 500×500m resolution. Each tile is scored by a Random Forest model trained on 102 confirmed wreck locations from NOAA nautical chart data."),
+    ("🔴 Red Circles", "Red circles are high-risk tiles — the top N% most likely to contain an undiscovered wreck. Opacity indicates confidence: brighter red = higher ML probability."),
+    ("🟡 Yellow Dots", "Yellow dots are confirmed wreck locations from NOAA ENC charts and the NOAA ENC Direct API. These were used to train and validate the model."),
+    ("🎚️ The Slider", "Use the sidebar slider to adjust how many tiles are shown. At 10%, the model captures 87% of known wrecks while reducing the search area by 90%."),
+    ("📈 The Metrics", "Total Tiles Analyzed = full study area. High Risk Zones = tiles above your threshold. Known Wrecks Captured = how many confirmed wrecks fall inside high-risk zones."),
+    ("✅ Ready", "You're all set. Zoom into the Outer Banks to explore high-risk clusters. Hover over any circle for depth and probability details."),
+]
+
+if 'tour_active' not in st.session_state:
+    st.session_state.tour_active = False
+if 'tour_step' not in st.session_state:
+    st.session_state.tour_step = 0
+
+if st.sidebar.button("📖 Take the Tour"):
+    st.session_state.tour_active = True
+    st.session_state.tour_step = 0
+
+if st.session_state.tour_active:
+    step = st.session_state.tour_step
+    title, text = TOUR_STEPS[step]
+
+    with st.container():
+        st.info(f"**{title}** ({step + 1}/{len(TOUR_STEPS)})\n\n{text}")
+        col_prev, col_next, col_close = st.columns([1, 1, 1])
+
+        with col_prev:
+            if step > 0:
+                if st.button("← Back"):
+                    st.session_state.tour_step -= 1
+                    st.rerun()
+
+        with col_next:
+            if step < len(TOUR_STEPS) - 1:
+                if st.button("Next →"):
+                    st.session_state.tour_step += 1
+                    st.rerun()
+            else:
+                if st.button("✅ Finish"):
+                    st.session_state.tour_active = False
+                    st.rerun()
+
+        with col_close:
+            if st.button("✕ Close"):
+                st.session_state.tour_active = False
+                st.rerun()
+
 st.title("🚢 Graveyard of the Atlantic — Undiscovered Wreck Risk Map")
 st.markdown("Identifying high-risk zones for undiscovered shipwrecks along the North Carolina coast using NOAA nautical chart data.")
 
@@ -15,6 +63,9 @@ def load_data():
     gdf = gpd.read_file('./data_sources/grid_with_risk.gpkg')
     gdf = gdf.dropna(subset=['DRVAL1', 'DRVAL2', 'depth_range', 'obstruction_distance'])
     gdf = gdf.to_crs(epsg=4326)
+    # precompute centroids once
+    gdf['cx'] = gdf.geometry.centroid.x
+    gdf['cy'] = gdf.geometry.centroid.y
     return gdf
 
 with st.spinner("Loading NOAA nautical chart data..."): # loading icon
@@ -26,8 +77,8 @@ st.sidebar.header("Controls")
 top_percentile = st.sidebar.slider(
     "Show Top % High Risk Tiles",
     min_value=1,
-    max_value=20,
-    value=10,
+    max_value=10,
+    value=1,
     step=1,
     help="Show only the top N% highest scoring tiles"
 )
@@ -54,30 +105,29 @@ with st.spinner("Rendering map..."):
     m = folium.Map(location=center, zoom_start=9, tiles='CartoDB dark_matter')
 
     if show_high_risk:
-        for _, row in high_risk.iterrows():
-            centroid = row.geometry.centroid
-            folium.CircleMarker(
-                location=[centroid.y, centroid.x],
-                radius=3,
-                color='red',
-                fill=True,
-                fill_color='red',
-                fill_opacity=row['wreck_prob'],
-                tooltip=f"ML Probability: {row['wreck_prob']:.3f} | Depth: {row['DRVAL1']:.0f}m"
-            ).add_to(m)
+        folium.GeoJson(
+            high_risk[['geometry', 'wreck_prob', 'DRVAL1']].to_json(),
+            style_function=lambda f: {
+                'fillColor': 'red',
+                'color': 'red',
+                'weight': 0,
+                'fillOpacity': f['properties']['wreck_prob']
+            },
+            tooltip=folium.GeoJsonTooltip(fields=['wreck_prob', 'DRVAL1'],
+                                           aliases=['ML Probability', 'Depth (m)'])
+        ).add_to(m)
 
     if show_wrecks:
-        for _, row in total_wrecks.iterrows():
-            centroid = row.geometry.centroid
-            folium.CircleMarker(
-                location=[centroid.y, centroid.x],
-                radius=6,
-                color='yellow',
-                fill=True,
-                fill_color='yellow',
-                fill_opacity=0.9,
-                tooltip="Confirmed wreck"
-            ).add_to(m)
+        folium.GeoJson(
+            total_wrecks[['geometry']].to_json(),
+            style_function=lambda f: {
+                'fillColor': 'yellow',
+                'color': 'yellow',
+                'weight': 1,
+                'fillOpacity': 0.9
+            },
+            tooltip=folium.GeoJsonTooltip(fields=[], aliases=[])
+        ).add_to(m)
 
     st_folium(m, width=1200, height=500)
 
