@@ -161,3 +161,6 @@ with st.expander("Methodology"):
     
     102 confirmed wrecks is a small training set for a dataset of this size, which caps the model's precision. The Outer Banks is also uniformly shallow, so depth alone can't pinpoint exact wreck locations. Incorporating seafloor composition, historical shipping routes, and sediment transport data would meaningfully improve accuracy and represents the best way to expand GAPS for further use.
     """)
+
+st.divider()
+st.caption("Made by Izad Khokhar for SMathHacks 2026")
