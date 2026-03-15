@@ -2,6 +2,8 @@ import pandas as pd
 import geopandas as gpd
 import numpy as np
 from shapely.geometry import box
+import requests
+import io
 
 # File Paths
 gdb_path    = "./data_sources/NOAA_coastal_data.gdb"
@@ -14,15 +16,31 @@ FEATURES = [
     'obstruction_distance',
     'DRVAL2',
     'depth_range',
-    #'sand_distance',
+    # 'sand_distance',
 ]
 
 # Load wreck layers
 wrecks = gpd.read_file(gdb_path, layer='Coastal_Wreck_point').to_crs(epsg=4326)
 wreck_area = gpd.read_file(gdb_path, layer='Coastal_Wreck_area').to_crs(epsg=4326)
 
+def fetch_awois_wrecks():
+    import urllib3
+    urllib3.disable_warnings()
+    bbox = "-76.5,34.5,-75.0,36.5"
+    url = (
+        "https://encdirect.noaa.gov/arcgis/rest/services/encdirect/enc_harbour/MapServer/36/query"
+        f"?where=1=1&geometry={bbox}&geometryType=esriGeometryEnvelope"
+        "&inSR=4326&spatialRel=esriSpatialRelIntersects"
+        "&outFields=*&returnGeometry=true&f=geojson"
+    )
+    r = requests.get(url, verify=False)
+    return gpd.read_file(io.StringIO(r.text)).to_crs(epsg=4326)
+
+awois_wrecks = fetch_awois_wrecks()
+print(f"AWOIS wrecks fetched: {len(awois_wrecks)}")
+
 potential_wreck_targets = gpd.GeoDataFrame(
-    pd.concat([wrecks, wreck_area], ignore_index=True), # combines wreck points and wreck areas into a single dataframe
+    pd.concat([wrecks, wreck_area, awois_wrecks], ignore_index=True), # combines wreck points and wreck areas into a single dataframe
     crs="EPSG:4326"
 )
 
@@ -62,24 +80,23 @@ def load_shore_distance(grid):
     return grid.geometry.centroid.distance(coastline.union_all())
 LOADERS['shore_distance'] = load_shore_distance
 
-def load_DRVAL1(grid):
-    # Add Coastal Depth Area to dataframe
+def load_DRVAL1(grid): # min depth
     min_depth = gpd.read_file(gdb_path, layer='Coastal_Depth_Area').to_crs(epsg=32618)
     temp = gpd.sjoin(grid[['geometry']], min_depth[['DRVAL1', 'geometry']], how='left')
     return temp.groupby(temp.index).first()['DRVAL1'].fillna(-1).astype(float)
 LOADERS['DRVAL1'] = load_DRVAL1
 
-def load_DRVAL2(grid):
+def load_DRVAL2(grid): # max depth
     min_depth = gpd.read_file(gdb_path, layer='Coastal_Depth_Area').to_crs(epsg=32618)
     temp = gpd.sjoin(grid[['geometry']], min_depth[['DRVAL2', 'geometry']], how='left')
     return temp.groupby(temp.index).first()['DRVAL2'].fillna(-1).astype(float)
 LOADERS['DRVAL2'] = load_DRVAL2
 
-def load_depth_range(grid):
+def load_depth_range(grid): # max depth - min depth
     return (grid['DRVAL2'] - grid['DRVAL1']).clip(lower=0)
 LOADERS['depth_range'] = load_depth_range
 
-def load_sand_distance(grid):
+def load_sand_distance(grid): # 
     sand = gpd.read_file(sand_path).to_crs(epsg=32618)
     return joined_df_m.geometry.centroid.distance(sand.union_all())
 LOADERS['sand_distance'] = load_sand_distance
