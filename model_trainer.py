@@ -62,20 +62,12 @@ print(f"ROC-AUC: {roc_auc_score(y_test, y_proba):.4f}")
 # Add ML probabilities to grid
 gdf['wreck_prob'] = model.predict_proba(gdf[FEATURES].values)[:, 1]
 
-# Full grid with risk score (for heatmap coloring)
+# Confirm ML capture rate at 1% threshold
+threshold_ml = gdf['wreck_prob'].quantile(0.99)
+top_ml = gdf[gdf['wreck_prob'] >= threshold_ml]
+ml_capture = top_ml[top_ml['target']==1].shape[0]
+print(f"Top 1% by ML probability captures {ml_capture}/{total_wrecks} known wrecks ({100*ml_capture/total_wrecks:.1f}%)")
+
+# Export full grid with wreck_prob, risk_score, and dredge_overlap for app.py
 gdf.to_file('./data_sources/grid_with_risk.gpkg', driver='GPKG')
-
-# Top 5% highest risk tiles as centroids (circles on map)
-top5 = gdf[gdf['wreck_prob'] >= gdf['wreck_prob'].quantile(0.95)].copy()
-top5['geometry'] = top5.geometry.centroid
-top5.to_file('./data_sources/high_risk_points.gpkg', driver='GPKG')
-
-# Known wreck locations for reference overlay
-known_wrecks = gdf[gdf['target'] == 1].copy()
-known_wrecks['geometry'] = known_wrecks.geometry.centroid
-known_wrecks.to_file('./data_sources/known_wrecks.gpkg', driver='GPKG')
-
-print(f"\nHigh risk points (top 5%): {len(top5)} tiles")
 print("Exported → grid_with_risk.gpkg")
-print("Exported → high_risk_points.gpkg")
-print("Exported → known_wrecks.gpkg")

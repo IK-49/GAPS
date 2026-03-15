@@ -16,6 +16,7 @@ FEATURES = [
     'obstruction_distance',
     'DRVAL2',
     'depth_range',
+    # 'dredge_overlap'
     # 'sand_distance',
 ]
 

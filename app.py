@@ -7,13 +7,13 @@ import pandas as pd
 st.set_page_config(page_title="GAPS Map", layout="wide")
 
 TOUR_STEPS = [
-    ("🗺️ Welcome to GAPS", "This tool maps high-probability zones for undiscovered shipwrecks along the North Carolina Outer Banks, also known as the 'Graveyard of the Atlantic'. Click Next to learn how it works."),
+    ("🗺️ Welcome to GAPS", "This tool maps high-probability zones for undiscovered shipwrecks along the North Carolina Outer Banks, also known as the 'Graveyard of the Atlantic' — a coastline responsible for over 3,000 shipwrecks. Click Next to learn how it works."),
     ("📊 The Grid", "The study area is divided into 91,980 tiles at 500×500m resolution. Each tile is scored by a Random Forest model trained on 102 confirmed wreck locations from NOAA nautical chart data."),
-    ("🔴 Red Circles", "Red circles are high-risk tiles or the top N% most likely to contain an undiscovered wreck. Opacity indicates confidence: brighter red = higher ML probability according to the model."),
-    ("🟡 Yellow Dots", "Yellow dots are confirmed wreck locations from NOAA ENC charts and the NOAA ENC Direct API. These were used to train and validate the model."),
+    ("🟢 Green Dots", "Green dots are confirmed wreck locations from NOAA ENC charts and the NOAA ENC Direct API. These were used to train and validate the model."),
+    ("🔴 Red Zones", "Red zones are high-risk tiles — the top N% most likely to contain an undiscovered wreck. Opacity indicates confidence: brighter red = higher ML probability."),
     ("🎚️ The Slider", "Use the sidebar slider to adjust how many tiles are shown. At just 1%, the model captures 82% of known wrecks while reducing the search area by 99%."),
-    ("📈 The Metrics", "Total Tiles Analyzed = full study area. High Risk Zones = tiles above your threshold. Known Wrecks Captured = how many confirmed wrecks fall inside high-risk zones."),
-    ("✅ Ready", "You're all set. Zoom into the Outer Banks to explore high-risk clusters. Hover over the red circles for depth and probability details."),
+    ("📈 The Metrics", "Total Tiles Analyzed = full study area. High Risk Zones = tiles above your threshold. Known Wrecks Captured = how many confirmed wrecks fall inside high-risk zones. Search Area Reduction = how much ocean has been eliminated from consideration."),
+    ("✅ Ready", "You're all set. Zoom into the Outer Banks to explore high-risk clusters. Hover over any zone for ML probability and depth details. Orange zones are your priority targets."),
 ]
 
 if 'tour_active' not in st.session_state:
@@ -86,6 +86,12 @@ top_percentile = st.sidebar.slider(
 show_wrecks = st.sidebar.checkbox("Show confirmed wrecks", value=True)
 show_high_risk = st.sidebar.checkbox("Show high-risk zones", value=True)
 
+st.sidebar.markdown("""
+**Map Legend**
+🟢 Confirmed wreck
+🔴 High risk zone
+""")
+
 # Statistics
 col1, col2, col3, col4 = st.columns(4)
 
@@ -113,22 +119,24 @@ with st.spinner("Rendering map..."):
                 'weight': 0,
                 'fillOpacity': f['properties']['wreck_prob']
             },
-            tooltip=folium.GeoJsonTooltip(fields=['wreck_prob', 'DRVAL1'],
-                                           aliases=['ML Probability', 'Depth (m)'])
+            tooltip=folium.GeoJsonTooltip(
+                fields=['wreck_prob', 'DRVAL1'],
+                aliases=['ML Probability', 'Depth (m)']
+            )
         ).add_to(m)
 
     if show_wrecks:
         folium.GeoJson(
             total_wrecks[['geometry']].to_json(),
             style_function=lambda f: {
-                'fillColor': 'yellow',
-                'color': 'yellow',
+                'fillColor': 'green',
+                'color': 'green',
                 'weight': 1,
                 'fillOpacity': 0.9
             },
             tooltip=folium.GeoJsonTooltip(fields=[], aliases=[])
         ).add_to(m)
-
+    
     st_folium(m, width=1200, height=500)
 
 # Table Rendering
